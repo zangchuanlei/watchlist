@@ -2,7 +2,7 @@ import os, sys
 from email.policy import default
 from pathlib import Path
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, flash, redirect, url_for
 from markupsafe import escape
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -10,6 +10,7 @@ from sqlalchemy.orm import DeclarativeBase
 SQLALCHEMY_DATABASE_URI = 'sqlite:///' if sys.platform.startswith('win') else 'sqlite:////'
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI + str(Path(app.root_path) / 'data.db')
+app.config['SECRET_KEY'] = 'dev'  # 等同于 app.secret_key = 'dev'
 
 
 class Base(DeclarativeBase):
@@ -29,24 +30,20 @@ def user_page(name):
     return f'User {escape(name)}'
 
 
-name = 'Grey Li'
-movies = [
-    {'title': 'My Neighbor Totoro', 'year': '1988'},
-    {'title': 'Dead Poets Society', 'year': '1989'},
-    {'title': 'A Perfect World', 'year': '1993'},
-    {'title': 'Leon', 'year': '1994'},
-    {'title': 'Mahjong', 'year': '1996'},
-    {'title': 'Swallowtail Butterfly', 'year': '1996'},
-    {'title': 'King of Comedy', 'year': '1999'},
-    {'title': 'Devils on the Doorstep', 'year': '1999'},
-    {'title': 'WALL-E', 'year': '2008'},
-    {'title': 'The Pork of Music', 'year': '2012'},
-]
-
-
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     # user = db.session.execute(select(User)).scalar()
+    if request.method == 'POST':
+        title = request.form['title']
+        year = request.form['year']
+        if not title or not year or len(year) != 4 or len(title) > 60:
+            flash('Invalid input.')
+            return redirect(url_for('index'))
+        movie = Movie(title=title, year=year)
+        db.session.add(movie)
+        db.session.commit()
+        flash('Item added.')
+        return redirect(url_for('index'))
     movies = db.session.execute(select(Movie)).scalars().all()
     return render_template('index.html', movies=movies)
 
@@ -118,3 +115,31 @@ def page_not_found(error):
 def inject_user():
     user = db.session.execute(select(User)).scalar()
     return dict(user=user)
+
+
+@app.route('/movie/edit/<int:movie_id>', methods=['GET', 'POST'])
+def edit_movie(movie_id):
+    movie = db.get_or_404(Movie, movie_id)
+
+    if request.method == 'POST':
+        title = request.form['title'].strip()
+        year = request.form['year'].strip()
+
+        if not title or not year or len(year) != 4 or len(title) > 60:
+            flash('Invalid input.')
+            return redirect(url_for('edit_movie', movi_id=movie_id))
+        movie.title = title
+        movie.year = year
+        db.session.commit()
+        flash('Item updated.')
+        return redirect(url_for('index'))
+    return render_template('edit.html', movie=movie)
+
+
+@app.route('/movie/delete/<int:movie_id>', methods=['POST'])
+def delete_movie(movie_id):
+    movie = db.get_or_404(Movie, movie_id)
+    db.session.delete(movie)
+    db.session.commit()
+    flash('Item deleted.')
+    return redirect(url_for('index'))
