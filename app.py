@@ -46,9 +46,9 @@ movies = [
 
 @app.route('/')
 def index():
-    user = db.session.execute(select(User)).scalar()
+    # user = db.session.execute(select(User)).scalar()
     movies = db.session.execute(select(Movie)).scalars().all()
-    return render_template('index.html', user=user, movies=movies)
+    return render_template('index.html', movies=movies)
 
 
 from sqlalchemy import String, select
@@ -79,6 +79,7 @@ def init_database(drop):
     db.create_all()
     click.echo('Initialized the database.')
 
+
 @app.cli.command()
 def forge():
     db.drop_all()
@@ -98,10 +99,22 @@ def forge():
         {'title': 'The Pork of Music', 'year': '2012'},
     ]
 
-    user=User(name=name)
+    user = User(name=name)
     db.session.add(user)
     for m in movies:
-        movie=  Movie(title=m['title'], year=m['year'])
+        movie = Movie(title=m['title'], year=m['year'])
         db.session.add(movie)
     db.session.commit()
     click.echo('Done!')
+
+
+@app.errorhandler(404)
+def page_not_found(error):
+    # user = db.session.execute(select(User)).scalar()
+    return render_template('404.html')
+
+
+@app.context_processor
+def inject_user():
+    user = db.session.execute(select(User)).scalar()
+    return dict(user=user)
